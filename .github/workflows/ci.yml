@@ -1,0 +1,4 @@
+# ci.yml
+# GitHub Actions workflow for continuous integration (build, test, lint)
+
+# TODO: Define jobs for Go backend and Next.js frontend 
