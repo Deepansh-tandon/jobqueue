@@ -1,24 +1,35 @@
 package config
 
-import ( "fmt" "os")
+import (
+	"os"
 
-type Config struct{
-	RedisUrl string
-	Port 	 string
-	AiKey	string
+	"github.com/joho/godotenv"
+)
+
+// Config holds all configuration for the application.
+type Config struct {
+	PostgresDSN string
+	RedisURL    string
+	Port        string
 }
 
-func load()(*Config,error){
-	c:=&Config{
-		RedisUrl:os.Getenv("REDIS_URL"),
-		Port:os.Getenv("PORT"),
-		AiKey:os.Getenv("AI_KEY"),
+// Load reads configuration from environment variables.
+func Load() (*Config, error) {
+	// In a local environment, load .env file.
+	// In production (e.g., Docker), environment variables are usually passed directly.
+	_ = godotenv.Load()
+
+	dsn := os.Getenv("POSTGRES_DSN")
+	redisURL := os.Getenv("REDIS_URL")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
-	if c.RedisUrl==""{
-		return nil,fmt.Errorf("REDIS_URL is empty")
-	}
-	if c.Port==""{
-		c.Port="8080"
-	}
-	return c,nil
+
+	return &Config{
+		PostgresDSN: dsn,
+		RedisURL:    redisURL,
+		Port:        port,
+	}, nil
 }

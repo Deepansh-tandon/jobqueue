@@ -1,0 +1,19 @@
+{
+  "panels":[
+    {
+      "type":"graph",
+      "title":"Jobs Processed",
+      "targets":[{"expr":"job_processed_total","legendFormat":"{{type}}"}]
+    },
+    {
+      "type":"graph",
+      "title":"Jobs Failed",
+      "targets":[{"expr":"job_failed_total","legendFormat":"{{type}}"}]
+    },
+    {
+      "type":"graph",
+      "title":"Queue Length",
+      "targets":[{"expr":"queue_length","legendFormat":"{{queue}}"}]
+    }
+  ]
+}
