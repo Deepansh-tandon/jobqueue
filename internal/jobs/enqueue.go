@@ -1,11 +1,13 @@
 package jobs
+
 import(
-	
+	"fmt"
 	"context"
 	"github.com/google/uuid"
 	"github.com/go-redis/redis/v8"
 	"time"
 	"encoding/json"
+	"jobqueue/internal/heuristics"
 )
 
 func EnqueueJob(rdb *redis.Client, job Job) error {
@@ -21,22 +23,7 @@ func EnqueueJob(rdb *redis.Client, job Job) error {
 	}
 
 	// For now, use a simple queue name since heuristics router is not implemented
-	queueName := "queue:priority:1"
+	// queueName := "queue:priority:1"
+	queueName := heuristics.GetPriorityQueue(job.Type)
 	return rdb.LPush(context.Background(), queueName, data).Err()
-eturn "queue:priority:3"
-	default:
-		return "queue:default"
-	}
-}urn "queue:priority:3"
-	default:
-		return "queue:default"
-	}
-turn "queue:priority:3"
-	default:
-		return "queue:default"
-	}
-}urn "queue:priority:3"
-	default:
-		return "queue:default"
-	}
 }

@@ -15,7 +15,7 @@ func TestEnqueueJob(t *testing.T) {
     fmt.Println("=== Starting EnqueueJob Test ===")
     
     // Get Redis URL from environment variable
-    redisURL := "redis://:0A14chHYQTL7V9wSqJMUx1cWat505Qx0@redis-19161.c266.us-east-1-3.ec2.redns.redis-cloud.com:19161"
+    redisURL := 
     if redisURL == "" {
         fmt.Println("❌ REDIS_URL environment variable not set, skipping test")
         t.Skip("REDIS_URL environment variable not set, skipping test")
