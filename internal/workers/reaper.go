@@ -75,7 +75,7 @@ func (r *Reaper) reapStuckJobs(ctx context.Context) {
 			continue
 		}
 
-		queueName := heuristics.GetPriorityQueue(job.Type)
+		queueName := heuristics.GetQueue(job.Type)
 		if err := r.rdb.LPush(ctx, queueName, job.ID).Err(); err != nil {
 			tx.Rollback()
 			r.logger.Error("failed to re-enqueue reaped job", zap.Error(err), zap.String("job_id", job.ID))

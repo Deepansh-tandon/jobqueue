@@ -32,7 +32,7 @@ vendor/
 # Environment files
 .env
 .env.*
-
+.md
 # Node.js/Next.js
 ui/node_modules/
 ui/.next/
@@ -44,7 +44,7 @@ coverage*
 
 # Docker
 *.pid
-
+.env
 # Misc
 *.local
 npm-debug.log*

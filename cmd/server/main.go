@@ -93,6 +93,8 @@ func main() {
 		mw,
 		apiHandler.RegisterHandler,
 		apiHandler.LoginHandler,
+		apiHandler.CreateProjectHandler,
+		apiHandler.ListProjectsHandler,
 		apiHandler.SubmitHandler,
 		apiHandler.StatusHandler,
 		apiHandler.ListHandler,

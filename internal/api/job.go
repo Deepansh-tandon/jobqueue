@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"jobqueue/internal/heuristics"
+	"jobqueue/internal/jobs"
 	"jobqueue/internal/middleware"
 	"jobqueue/internal/models"
 )
@@ -27,7 +28,7 @@ type SubmitResponse struct {
 }
 
 func (a *API) SubmitHandler(w http.ResponseWriter, r *http.Request) {
-	_, ok := middleware.GetUser(r)
+	user, ok := middleware.GetUser(r)
 	if !ok {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
@@ -39,7 +40,14 @@ func (a *API) SubmitHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Validate that user is a member of req.ProjectID
+	if err := jobs.ValidateSubmit(req.ProjectID, req.Type, req.Payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if _, ok := a.loadOwnedProject(w, user, req.ProjectID); !ok {
+		return
+	}
 
 	payloadJSON, err := json.Marshal(req.Payload)
 	if err != nil {
@@ -62,7 +70,7 @@ func (a *API) SubmitHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queueName := heuristics.GetPriorityQueue(req.Type)
+	queueName := heuristics.GetQueue(req.Type)
 	if err := a.rdb.LPush(r.Context(), queueName, job.ID).Err(); err != nil {
 		a.logger.Error("failed to enqueue job", zap.Error(err), zap.String("job_id", job.ID))
 		http.Error(w, "failed to enqueue job", http.StatusInternalServerError)
@@ -93,15 +101,7 @@ func (a *API) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security Check: Ensure the user has access to the project this job belongs to.
-	var project models.Project
-	if err := a.db.First(&project, "id = ? AND user_id = ?", job.ProjectID, user.ID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		a.logger.Error("failed to get project for auth check", zap.Error(err), zap.String("project_id", job.ProjectID))
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+	if _, ok := a.loadOwnedProject(w, user, job.ProjectID); !ok {
 		return
 	}
 
@@ -121,15 +121,7 @@ func (a *API) ListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security Check: Ensure the user has access to the project.
-	var project models.Project
-	if err := a.db.First(&project, "id = ? AND user_id = ?", projectID, user.ID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		a.logger.Error("failed to get project for auth check", zap.Error(err), zap.String("project_id", projectID))
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+	if _, ok := a.loadOwnedProject(w, user, projectID); !ok {
 		return
 	}
 
