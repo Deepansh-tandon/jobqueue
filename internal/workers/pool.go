@@ -2,7 +2,10 @@ package workers
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"go.uber.org/zap"
@@ -15,13 +18,15 @@ type Pool struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	jobQueue      string
+	group         string
+	lease         time.Duration
+	prefix        string
 	min, max, num int
 	nextWorkerID  int
 	mu            sync.Mutex
 	wg            sync.WaitGroup
 	workers       map[int]context.CancelFunc
 
-	// Dependencies
 	db      *gorm.DB
 	rdb     *redis.Client
 	ai      *ai.AI
@@ -29,12 +34,16 @@ type Pool struct {
 	logger  *zap.Logger
 }
 
-func NewPool(ctx context.Context, queue string, min, max int, db *gorm.DB, rdb *redis.Client, ai *ai.AI, metrics *monitoring.Metrics, logger *zap.Logger) *Pool {
+func NewPool(ctx context.Context, stream, group string, lease time.Duration, min, max int, db *gorm.DB, rdb *redis.Client, ai *ai.AI, metrics *monitoring.Metrics, logger *zap.Logger) *Pool {
 	pCtx, pCancel := context.WithCancel(ctx)
+	host, _ := os.Hostname()
 	pool := &Pool{
 		ctx:          pCtx,
 		cancel:       pCancel,
-		jobQueue:     queue,
+		jobQueue:     stream,
+		group:        group,
+		lease:        lease,
+		prefix:       fmt.Sprintf("%s-%d", host, os.Getpid()),
 		min:          min,
 		max:          max,
 		db:           db,
@@ -42,10 +51,10 @@ func NewPool(ctx context.Context, queue string, min, max int, db *gorm.DB, rdb *
 		ai:           ai,
 		metrics:      metrics,
 		workers:      make(map[int]context.CancelFunc),
-		logger:       logger.With(zap.String("queue", queue)),
+		logger:       logger.With(zap.String("stream", stream)),
 		nextWorkerID: 1,
 	}
-	pool.ScaleUp(min) // Start with minimum workers
+	pool.ScaleUp(min)
 	return pool
 }
 
@@ -62,7 +71,8 @@ func (p *Pool) ScaleUp(n int) {
 		p.num++
 		p.wg.Add(1)
 
-		worker := NewWorker(workerID, p.jobQueue, p.db, p.rdb, p.ai, p.metrics, p.logger)
+		consumer := fmt.Sprintf("%s-w%d", p.prefix, workerID)
+		worker := NewWorker(workerID, p.jobQueue, p.group, consumer, p.lease, p.db, p.rdb, p.ai, p.metrics, p.logger)
 		go func(id int) {
 			defer func() {
 				p.mu.Lock()
@@ -81,7 +91,6 @@ func (p *Pool) ScaleDown(n int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.logger.Info("attempting to scale down", zap.Int("n", n), zap.Int("current_workers", p.num))
 	i := 0
 	for id, cancel := range p.workers {
 		if i >= n || p.num <= p.min {

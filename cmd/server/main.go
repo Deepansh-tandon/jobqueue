@@ -17,6 +17,7 @@ import (
 	"jobqueue/internal/ai"
 	"jobqueue/internal/api"
 	"jobqueue/internal/config"
+	"jobqueue/internal/jobs"
 	"jobqueue/internal/middleware"
 	"jobqueue/internal/models"
 	"jobqueue/internal/monitoring"
@@ -25,38 +26,43 @@ import (
 )
 
 func main() {
-	// Logger
-	logger, err := zap.NewDevelopment() // More verbose for local dev
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		log.Fatalf("can't initialize zap logger: %v", err)
 	}
 	defer logger.Sync()
 
-	// Register Task Processors
-	tasks.Register("send_email", &tasks.MockEmailSender{})
-	tasks.Register("generate_receipt", &tasks.ReceiptGenerator{})
-	tasks.Register("summarize_text", &tasks.MockSummarizer{})
+	tasks.Register(config.JobTypeSendEmail, &tasks.MockEmailSender{})
+	tasks.Register(config.JobTypeGenerateReceipt, &tasks.ReceiptGenerator{})
+	tasks.Register(config.JobTypeSummarizeText, &tasks.MockSummarizer{})
+	tasks.Register(config.JobTypeEcho, tasks.EchoProcessor{})
+	tasks.Register(config.JobTypeFailUntilN, tasks.FailUntilNProcessor{})
+	tasks.Register(config.JobTypeAlwaysFail, tasks.AlwaysFailProcessor{})
+	tasks.Register(config.JobTypeSleep, tasks.SleepProcessor{})
 
-	// Config
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Fatal("failed to load config", zap.Error(err))
 	}
 
-	// Context for graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Database
 	db, err := gorm.Open(postgres.Open(cfg.PostgresDSN), &gorm.Config{})
 	if err != nil {
 		logger.Fatal("failed to connect to database", zap.Error(err))
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Project{}, &models.Job{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Project{},
+		&models.Job{},
+		&models.JobEvent{},
+		&models.FailureIncident{},
+		&models.FailureEvent{},
+	); err != nil {
 		logger.Fatal("auto-migrate failed", zap.Error(err))
 	}
 
-	// Redis
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		logger.Fatal("failed to parse redis url", zap.Error(err))
@@ -66,29 +72,39 @@ func main() {
 		logger.Fatal("failed to connect to redis", zap.Error(err))
 	}
 
-	// Dependencies
+	if err := jobs.EnsureConsumerGroups(ctx, rdb, cfg.StreamGroup); err != nil {
+		logger.Fatal("failed to create stream groups", zap.Error(err))
+	}
+
+	var diagnoser jobs.Diagnoser = jobs.NopDiagnoser{}
+	if cfg.GroqAPIKey != "" {
+		diagnoser = &ai.GroqDiagnoser{
+			APIKey:  cfg.GroqAPIKey,
+			Model:   cfg.GroqModel,
+			BaseURL: cfg.GroqBaseURL,
+		}
+		logger.Info("groq diagnoser enabled", zap.String("model", cfg.GroqModel))
+	}
+
 	metrics := monitoring.NewMetrics()
-	aiClient := ai.New(rdb)
+	aiClient := ai.New(diagnoser)
 	apiHandler := api.New(db, rdb, logger)
 	mw := &middleware.Middleware{
 		DB:    db,
 		Cache: cache.New(5*time.Minute, 10*time.Minute),
 	}
 
-	// Worker Pools & Autoscalers
-	highPriorityPool := workers.NewPool(ctx, "queue:high", 1, 10, db, rdb, aiClient, metrics, logger)
-	defaultPool := workers.NewPool(ctx, "queue:default", 1, 10, db, rdb, aiClient, metrics, logger)
+	highPriorityPool := workers.NewPool(ctx, config.StreamHigh, cfg.StreamGroup, cfg.JobLease, 1, 10, db, rdb, aiClient, metrics, logger)
+	defaultPool := workers.NewPool(ctx, config.StreamDefault, cfg.StreamGroup, cfg.JobLease, 1, 10, db, rdb, aiClient, metrics, logger)
 
 	highPriorityScaler := workers.NewAutoScaler(highPriorityPool, rdb, metrics, logger)
 	defaultScaler := workers.NewAutoScaler(defaultPool, rdb, metrics, logger)
-
-	reaper := workers.NewReaper(db, rdb, metrics, logger)
+	claimer := workers.NewClaimer(db, rdb, aiClient, metrics, logger, cfg.StreamGroup, cfg.JobLease)
 
 	go highPriorityScaler.Run(ctx)
 	go defaultScaler.Run(ctx)
-	go reaper.Run(ctx)
+	go claimer.Run(ctx)
 
-	// API Router
 	router := api.NewRouter(
 		mw,
 		apiHandler.RegisterHandler,
@@ -98,9 +114,13 @@ func main() {
 		apiHandler.SubmitHandler,
 		apiHandler.StatusHandler,
 		apiHandler.ListHandler,
+		apiHandler.ListFailuresHandler,
+		apiHandler.GetFailureHandler,
+		apiHandler.GetFailedJobHandler,
+		apiHandler.RequeueFailedJobHandler,
+		apiHandler.DiscardFailedJobHandler,
 	)
 
-	// Start HTTP Server
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", cfg.Port),
 		Handler: router,
@@ -113,21 +133,16 @@ func main() {
 		}
 	}()
 
-	// Wait for shutdown signal
 	<-ctx.Done()
-
 	logger.Info("shutting down server gracefully")
 
-	// Shutdown server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server shutdown failed", zap.Error(err))
 	}
 
-	// Shutdown worker pools
 	highPriorityPool.Shutdown()
 	defaultPool.Shutdown()
-
 	logger.Info("shutdown complete")
 }

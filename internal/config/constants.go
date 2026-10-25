@@ -1,21 +1,31 @@
 package config
 
-// Redis queue names consumed by worker pools (cmd/server/main.go).
+import "time"
+
 const (
-	QueueHigh    = "queue:high"
-	QueueDefault = "queue:default"
+	StreamHigh    = "stream:high"
+	StreamDefault = "stream:default"
+	StreamGroup   = "workers"
 )
 
-// Canonical job types — must match tasks.Register in cmd/server/main.go.
 const (
-	JobTypeSendEmail        = "send_email"
-	JobTypeGenerateReceipt  = "generate_receipt"
-	JobTypeSummarizeText    = "summarize_text"
+	JobTypeSendEmail       = "send_email"
+	JobTypeGenerateReceipt = "generate_receipt"
+	JobTypeSummarizeText   = "summarize_text"
+	JobTypeEcho            = "echo"
+	JobTypeFailUntilN      = "fail_until_n"
+	JobTypeAlwaysFail      = "always_fail"
+	JobTypeSleep           = "sleep"
 )
 
-// AllowedJobTypes lists types accepted by the submit API.
 var AllowedJobTypes = map[string]struct{}{
 	JobTypeSendEmail:       {},
 	JobTypeGenerateReceipt: {},
 	JobTypeSummarizeText:   {},
+	JobTypeEcho:            {},
+	JobTypeFailUntilN:      {},
+	JobTypeAlwaysFail:      {},
+	JobTypeSleep:           {},
 }
+
+const DefaultLease = 30 * time.Second

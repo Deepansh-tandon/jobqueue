@@ -1,12 +1,14 @@
 package ai
 
-import "github.com/go-redis/redis/v8"
+import "jobqueue/internal/jobs"
 
 type AI struct {
-	rdb *redis.Client
-	// Potentially an LLM client would go here in a real app
+	Diagnoser jobs.Diagnoser
 }
 
-func New(rdb *redis.Client) *AI {
-	return &AI{rdb: rdb}
+func New(d jobs.Diagnoser) *AI {
+	if d == nil {
+		d = jobs.NopDiagnoser{}
+	}
+	return &AI{Diagnoser: d}
 }

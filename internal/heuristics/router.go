@@ -2,13 +2,13 @@ package heuristics
 
 import "jobqueue/internal/config"
 
-// GetQueue returns the Redis list name workers listen on for the given job type.
+// GetQueue returns the Redis stream name workers consume for the given job type.
 func GetQueue(jobType string) string {
 	switch jobType {
 	case config.JobTypeSendEmail:
-		return config.QueueHigh
+		return config.StreamHigh
 	default:
-		return config.QueueDefault
+		return config.StreamDefault
 	}
 }
 

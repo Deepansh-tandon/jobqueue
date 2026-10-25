@@ -12,6 +12,8 @@ func TestValidateSubmit(t *testing.T) {
 	validPayload := map[string]interface{}{"to": "a@b.com"}
 
 	assert.NoError(t, ValidateSubmit("proj-1", config.JobTypeSendEmail, validPayload))
+	assert.NoError(t, ValidateSubmit("proj-1", config.JobTypeAlwaysFail, validPayload))
+	assert.NoError(t, ValidateSubmit("proj-1", config.JobTypeEcho, validPayload))
 	assert.ErrorIs(t, ValidateSubmit("", config.JobTypeSendEmail, validPayload), ErrProjectIDRequired)
 	assert.ErrorIs(t, ValidateSubmit("proj-1", "", validPayload), ErrJobTypeRequired)
 	assert.ErrorIs(t, ValidateSubmit("proj-1", "email", validPayload), ErrUnknownJobType)

@@ -17,24 +17,31 @@ func NewRouter(
 	submitHandler http.HandlerFunc,
 	statusHandler http.HandlerFunc,
 	listHandler http.HandlerFunc,
+	listFailuresHandler http.HandlerFunc,
+	getFailureHandler http.HandlerFunc,
+	getFailedJobHandler http.HandlerFunc,
+	requeueFailedJobHandler http.HandlerFunc,
+	discardFailedJobHandler http.HandlerFunc,
 ) http.Handler {
 	r := chi.NewRouter()
 
-	// Public
 	r.Post("/api/v1/register", registerHandler)
 	r.Post("/api/v1/login", loginHandler)
-
-	// Metrics
 	r.Handle("/metrics", promhttp.Handler())
 
-	// Protected
 	r.Group(func(r chi.Router) {
 		r.Use(mw.APIKeyAuth, mw.RateLimit)
 		r.Post("/api/v1/projects", createProjectHandler)
 		r.Get("/api/v1/projects", listProjectsHandler)
 		r.Post("/api/v1/job/submit", submitHandler)
 		r.Get("/api/v1/job/status/{jobID}", statusHandler)
-		r.Get("/api/v1/job/list", listHandler) // ?projectID=
+		r.Get("/api/v1/job/list", listHandler)
+
+		r.Get("/api/v1/failures", listFailuresHandler)
+		r.Get("/api/v1/failures/jobs/{jobID}", getFailedJobHandler)
+		r.Post("/api/v1/failures/jobs/{jobID}/requeue", requeueFailedJobHandler)
+		r.Delete("/api/v1/failures/jobs/{jobID}", discardFailedJobHandler)
+		r.Get("/api/v1/failures/{fingerprint}", getFailureHandler)
 	})
 
 	return r

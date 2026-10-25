@@ -20,22 +20,23 @@ func TestEnqueueJobID(t *testing.T) {
 
 	opts, err := redis.ParseURL(redisURL)
 	require.NoError(t, err)
-
 	rdb := redis.NewClient(opts)
 	defer rdb.Close()
 
-	queueName := config.QueueHigh
 	ctx := context.Background()
-	require.NoError(t, rdb.Del(ctx, queueName).Err())
+	stream := config.StreamHigh
+	require.NoError(t, rdb.Del(ctx, stream).Err())
+	require.NoError(t, EnsureConsumerGroups(ctx, rdb, config.StreamGroup))
 
 	jobID := "test-job-id-123"
 	require.NoError(t, EnqueueJobID(rdb, config.JobTypeSendEmail, jobID))
 
-	length, err := rdb.LLen(ctx, queueName).Result()
+	length, err := rdb.XLen(ctx, stream).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), length)
 
-	popped, err := rdb.RPop(ctx, queueName).Result()
+	msgs, err := rdb.XRange(ctx, stream, "-", "+").Result()
 	require.NoError(t, err)
-	assert.Equal(t, jobID, popped)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, jobID, msgs[0].Values["job_id"])
 }
