@@ -1,19 +1,19 @@
 version: '3.8'
 services:
-  # redis:
-  #   image: redis:7
-  #   ports: ["6379:6379"]
-  # postgres:
-  #   image: postgres:15
-  #   environment:
-  #     POSTGRES_DB: jobqueue
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: pass
-  #   ports: ["5432:5432"]
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: jobqueue
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass
+    ports: ["5432:5432"]
   jobqueue:
     build: .
     env_file: .env
-    # depends_on: [redis, postgres]
+    depends_on: [redis, postgres]
     ports: ["8080:8080"]
   prometheus:
     image: prom/prometheus
@@ -26,7 +26,10 @@ services:
       - ./internal/monitoring/grafana.json:/var/lib/grafana/dashboards/jobqueue.json
       - ./internal/monitoring/provisioning/:/etc/grafana/provisioning/
     environment:
-      GF_DASHBOARDS_JSON_ENABLED: "true"
-      GF_DASHBOARDS_JSON_PATH: "/var/lib/grafana/dashboards"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
     depends_on: [prometheus]
-    ports: ["3000:3000"]
+    ports: ["3002:3000"]

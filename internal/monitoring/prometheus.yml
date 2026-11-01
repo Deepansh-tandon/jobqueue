@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # API started with `go run` on the host.
+  - job_name: jobqueue-host
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+  # API started as the compose `jobqueue` service.
+  - job_name: jobqueue
+    static_configs:
+      - targets: ["jobqueue:8080"]

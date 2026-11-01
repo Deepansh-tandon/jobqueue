@@ -1,19 +1,58 @@
 {
-  "panels":[
+  "uid": "jobqueue",
+  "title": "Jobqueue",
+  "tags": ["jobqueue"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
     {
-      "type":"graph",
-      "title":"Jobs Processed",
-      "targets":[{"expr":"job_processed_total","legendFormat":"{{type}}"}]
+      "id": 1,
+      "type": "timeseries",
+      "title": "Active workers",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "jobqueue_workers_active", "legendFormat": "{{queue}}", "refId": "A" }]
     },
     {
-      "type":"graph",
-      "title":"Jobs Failed",
-      "targets":[{"expr":"job_failed_total","legendFormat":"{{type}}"}]
+      "id": 2,
+      "type": "timeseries",
+      "title": "Stream depth",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "jobqueue_queue_length", "legendFormat": "{{queue}}", "refId": "A" }]
     },
     {
-      "type":"graph",
-      "title":"Queue Length",
-      "targets":[{"expr":"queue_length","legendFormat":"{{queue}}"}]
+      "id": 3,
+      "type": "timeseries",
+      "title": "Jobs processed",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "jobqueue_jobs_processed_total", "legendFormat": "{{queue}} {{status}}", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Failure rate",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "expr": "sum by (type) (rate(jobqueue_job_failures_total[1m]))", "legendFormat": "{{type}}", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "p95 duration",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, type) (rate(jobqueue_job_duration_seconds_bucket[1m])))",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }
